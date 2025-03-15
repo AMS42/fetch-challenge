@@ -2,10 +2,10 @@ run:
 	@clear;
 	@python app.py
 
-test:
+tests:
 	@clear;
 	@python -m pytest -v
 
-verbose-test:
+verbose-tests:
 	@clear;
 	@python -m pytest -s -v
