@@ -1,9 +1,13 @@
-import os, random, string, uuid, yaml
-from cerberus import Validator
+import os, random, string, uuid
 from flask import Flask, jsonify, request
 from flask_restful import Resource, Api
-from openapi_spec_validator import validate
+from openapi_spec_validator import validate as validate_spec
 from openapi_spec_validator.readers import read_from_filename
+from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
+from openapi_schema_validator import validate as validate_schema
+from referencing import Registry, Resource as ReferencingResource
+from referencing.jsonschema import DRAFT202012
+from jsonschema import Draft202012Validator
 
 class DataInstance(object):
     """ 
@@ -11,27 +15,50 @@ class DataInstance(object):
     Holds all relevant data to run api for easy use to other modules.
     """
     _instance = None
-    _spec_dict, _base_uri = read_from_filename("api.yml")
     PROJECT_DIR = __file__.rsplit(os.sep, 1)[0]
+    _spec_dict, _base_uri = read_from_filename(os.path.join(PROJECT_DIR, "api.yml"))
 
     receipts = {}
     receipts_cache = {}
-    RECEIPT_SCHEMA = ""
-    ITEM_SCHEMA = ""
+        
+    try:
+        validate_spec(_spec_dict)
+    except OpenAPIValidationError: 
+        from sys import err
+        print("'api.yml' is malformed and could not be validated.", flush=err)
+        exit(1)
+
+    ITEM_SCHEMA = _spec_dict["components"]["schemas"]["Item"]
+    RECEIPT_SCHEMA = _spec_dict["components"]["schemas"]["Receipt"]
+    RECEIPT_SCHEMA["properties"]["items"]["items"] = ITEM_SCHEMA
+    
+    # registry = Registry().with_resource(
+    #     "/components/schemas/Item", ITEM_SCHEMA
+    # )
     
     def __new__(cls):
         if not cls._instance:
             cls._instance = super(DataInstance, cls).__new__(cls)
-            validate(cls._spec_dict)
-            cls._RECEIPT_SCHEMA = cls._spec_dict["components"]["schemas"]["Receipt"]
-            cls._ITEM_SCHEMA = cls._spec_dict["components"]["schemas"]["Item"]
         return cls._instance
 
 
 def valid_receipt(receipt) -> bool: 
-    return True
+    try:
+        validate_schema(
+            receipt, 
+            DataInstance.RECEIPT_SCHEMA
+            # , registry=DataInstance.registry
+        )
+        return True
+    except Exception as e:
+        print(e)
+        return False
 
-valid_receipt({"items": [
+valid_receipt({
+  "retailer": "Target",
+  "purchaseDate": "2022-01-01",
+  "purchaseTime": "13:01",
+  "items": [
     {
       "shortDescription": "Mountain Dew 12PK",
       "price": "6.49"
@@ -48,7 +75,10 @@ valid_receipt({"items": [
       "shortDescription": "   Klarbrunn 12-PK 12 FL OZ  ",
       "price": "12.00"
     }
-  ]})
+  ],
+  "total": "35.35"
+})
+
 
 class ReceiptProcessor(Resource):
     def post(self):
