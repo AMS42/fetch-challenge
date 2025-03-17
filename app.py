@@ -4,10 +4,11 @@ from flask_restful import Resource, Api
 from openapi_spec_validator import validate as validate_spec
 from openapi_spec_validator.readers import read_from_filename
 from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
-from openapi_schema_validator import validate as validate_schema
-from referencing import Registry, Resource as ReferencingResource
+from openapi_schema_validator import validate as validate_schema, OAS30Validator
+from referencing import Registry
 from referencing.jsonschema import DRAFT202012
-from jsonschema import Draft202012Validator
+from referencing.exceptions import NoSuchResource
+from sys import stderr
 
 class DataInstance(object):
     """ 
@@ -20,41 +21,49 @@ class DataInstance(object):
 
     receipts = {}
     receipts_cache = {}
-        
+
     try:
         validate_spec(_spec_dict)
     except OpenAPIValidationError: 
-        from sys import err
-        print("'api.yml' is malformed and could not be validated.", flush=err)
+        print("'api.yml' is malformed and could not be validated.", flush=stderr)
         exit(1)
 
-    ITEM_SCHEMA = _spec_dict["components"]["schemas"]["Item"]
-    RECEIPT_SCHEMA = _spec_dict["components"]["schemas"]["Receipt"]
-    RECEIPT_SCHEMA["properties"]["items"]["items"] = ITEM_SCHEMA
-    
-    # registry = Registry().with_resource(
-    #     "/components/schemas/Item", ITEM_SCHEMA
-    # )
+    SCHEMAS = {}
+    for k in _spec_dict["components"]["schemas"]:
+        SCHEMAS[k.upper()] = _spec_dict["components"]["schemas"][k]
     
     def __new__(cls):
         if not cls._instance:
             cls._instance = super(DataInstance, cls).__new__(cls)
         return cls._instance
 
+def retrieve_reference(uri: str):
+    if not uri.startswith("/components/schemas/"):
+        raise NoSuchResource(ref=uri)
+    schema_name = uri.removeprefix("/components/schemas/").upper()
+    if schema_name not in DataInstance.SCHEMAS:
+        raise NoSuchResource(ref=uri)
+    schema = DataInstance.SCHEMAS[schema_name]
+    return DRAFT202012.create_resource(schema)
 
 def valid_receipt(receipt) -> bool: 
     try:
+        reg = Registry(retrieve=retrieve_reference)
         validate_schema(
             receipt, 
-            DataInstance.RECEIPT_SCHEMA
-            # , registry=DataInstance.registry
+            DataInstance.SCHEMAS["RECEIPT"],
+            registry=reg,
+            cls=OAS30Validator
         )
         return True
     except Exception as e:
-        print(e)
-        return False
+        # raise e
+        print("This shit broke:", e, flush=stderr)
+    except NoSuchResource as e:
+        print(e, flush=stderr)
+    return False
 
-valid_receipt({
+print(valid_receipt({
   "retailer": "Target",
   "purchaseDate": "2022-01-01",
   "purchaseTime": "13:01",
@@ -77,7 +86,7 @@ valid_receipt({
     }
   ],
   "total": "35.35"
-})
+}))
 
 
 class ReceiptProcessor(Resource):
@@ -157,5 +166,5 @@ def create_app() -> Flask:
     return _app
 
 
-if __name__ == "__main__":
-    create_app().run(debug=True, port=8080)
+# if __name__ == "__main__":
+#     create_app().run(debug=True, port=8080)
