@@ -1,13 +1,12 @@
-import os, random, string, uuid
+import os, random, string, uuid, yaml
+from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_restful import Resource, Api
 from openapi_spec_validator import validate as validate_spec
 from openapi_spec_validator.readers import read_from_filename
 from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
 from openapi_schema_validator import validate as validate_schema, OAS30Validator
-from referencing import Registry
-from referencing.jsonschema import DRAFT202012
-from referencing.exceptions import NoSuchResource
+from jsonschema import ValidationError
 from sys import stderr
 
 class DataInstance(object):
@@ -28,65 +27,30 @@ class DataInstance(object):
         print("'api.yml' is malformed and could not be validated.", flush=stderr)
         exit(1)
 
-    SCHEMAS = {}
-    for k in _spec_dict["components"]["schemas"]:
-        SCHEMAS[k.upper()] = _spec_dict["components"]["schemas"][k]
+    RECEIPT_SCHEMA = _spec_dict["components"]["schemas"]["Receipt"]
+    RECEIPT_SCHEMA["components"] = {}
+    RECEIPT_SCHEMA["components"]["schemas"] = {}
+    RECEIPT_SCHEMA["components"]["schemas"] = { 
+        "Item": _spec_dict["components"]["schemas"]["Item"] 
+    }
     
     def __new__(cls):
         if not cls._instance:
             cls._instance = super(DataInstance, cls).__new__(cls)
         return cls._instance
-
-def retrieve_reference(uri: str):
-    if not uri.startswith("/components/schemas/"):
-        raise NoSuchResource(ref=uri)
-    schema_name = uri.removeprefix("/components/schemas/").upper()
-    if schema_name not in DataInstance.SCHEMAS:
-        raise NoSuchResource(ref=uri)
-    schema = DataInstance.SCHEMAS[schema_name]
-    return DRAFT202012.create_resource(schema)
+    
 
 def valid_receipt(receipt) -> bool: 
     try:
-        reg = Registry(retrieve=retrieve_reference)
         validate_schema(
             receipt, 
-            DataInstance.SCHEMAS["RECEIPT"],
-            registry=reg,
-            cls=OAS30Validator
+            DataInstance.RECEIPT_SCHEMA,
+            cls=OAS30Validator,
         )
         return True
-    except Exception as e:
-        # raise e
-        print("This shit broke:", e, flush=stderr)
-    except NoSuchResource as e:
+    except ValidationError as e:
         print(e, flush=stderr)
     return False
-
-print(valid_receipt({
-  "retailer": "Target",
-  "purchaseDate": "2022-01-01",
-  "purchaseTime": "13:01",
-  "items": [
-    {
-      "shortDescription": "Mountain Dew 12PK",
-      "price": "6.49"
-    },{
-      "shortDescription": "Emils Cheese Pizza",
-      "price": "12.25"
-    },{
-      "shortDescription": "Knorr Creamy Chicken",
-      "price": "1.26"
-    },{
-      "shortDescription": "Doritos Nacho Cheese",
-      "price": "3.35"
-    },{
-      "shortDescription": "   Klarbrunn 12-PK 12 FL OZ  ",
-      "price": "12.00"
-    }
-  ],
-  "total": "35.35"
-}))
 
 
 class ReceiptProcessor(Resource):
@@ -141,10 +105,9 @@ class PointsCalculator(Resource):
         for item in items:
             if len(item["shortDescription"].strip()) % 3 == 0:
                 points += float.__ceil__(float(item["price"]) * .2)
-
-        if int(receipt["purchaseDate"].rsplit("-", 1)[1]) % 2 == 1:  
-            # TODO - check date formatting rules
-            points += 6
+        
+        purchase_day = datetime.strptime(receipt["purchaseDate"], "%Y-%m-%d").day
+        if purchase_day % 2 == 1: points += 6
 
         hh, _ = receipt["purchaseTime"].split(":")
         if 14 <= int(hh) <= 15: points += 10
@@ -166,5 +129,5 @@ def create_app() -> Flask:
     return _app
 
 
-# if __name__ == "__main__":
-#     create_app().run(debug=True, port=8080)
+if __name__ == "__main__":
+    create_app().run(debug=True, port=8080)
