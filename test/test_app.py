@@ -1,5 +1,6 @@
-import json, os, pytest
+import json, pytest
 from app import create_app, DataInstance
+from pathlib import Path
 
 
 ### Status Codes ###
@@ -10,7 +11,7 @@ METHOD_NOT_ALLOWED = 405
 
 
 ### Configure Test Environment ###
-RECEIPTS_DIR = os.path.join(DataInstance.PROJECT_DIR, "test", "receipts")
+RECEIPTS_DIR = Path(DataInstance.PROJECT_DIR, "test", "receipts")
 
 
 @pytest.fixture()
@@ -41,56 +42,56 @@ def test_receipt_process_get(client):
 
 
 def test_receipt_process_post1(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "morning-receipt.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "morning-receipt.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == OKAY and "id" in response.json
 
 
 def test_receipt_process_post2(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "simple-receipt.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "simple-receipt.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == OKAY and "id" in response.json
 
 
 def test_receipt_process_post3(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "receipt1.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "receipt1.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == OKAY and "id" in response.json
 
 
 def test_receipt_process_post4(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "receipt2.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "receipt2.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == OKAY and "id" in response.json
 
 
 def test_receipt_process_post__malformed1_400(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "malformed-receipt1.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "malformed-receipt1.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == BAD_REQUEST
 
 
 def test_receipt_process_post__malformed2_400(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "malformed-receipt2.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "malformed-receipt2.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == BAD_REQUEST
 
 
 def test_receipt_process_post__malformed3_400(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "malformed-receipt3.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "malformed-receipt3.json")))
     response = client.post("/receipts/process", json=receipt)
     assert response.status_code == BAD_REQUEST
 
 
 def test_receipts_points_get1(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "receipt1.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "receipt1.json")))
     receipt_id = client.post("/receipts/process", json=receipt).json["id"]
     response = client.get(f"/receipts/{receipt_id}/points")
     assert response.status_code == OKAY and response.json["points"] == 28
 
 
 def test_receipts_points_get2(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "receipt2.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "receipt2.json")))
     response = client.post("/receipts/process", json=receipt)
     receipt_id = response.json["id"]
     response = client.get(f"/receipts/{receipt_id}/points")
@@ -98,7 +99,7 @@ def test_receipts_points_get2(client):
 
 
 def test_receipts_points_get3(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "morning-receipt.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "morning-receipt.json")))
     response = client.post("/receipts/process", json=receipt)
     receipt_id = response.json["id"]
     response = client.get(f"/receipts/{receipt_id}/points")
@@ -106,7 +107,7 @@ def test_receipts_points_get3(client):
 
 
 def test_receipts_points_get4(client):
-    receipt = json.load(open(os.path.join(RECEIPTS_DIR, "simple-receipt.json")))
+    receipt = json.load(open(Path(RECEIPTS_DIR, "simple-receipt.json")))
     response = client.post("/receipts/process", json=receipt)
     receipt_id = response.json["id"]
     response = client.get(f"/receipts/{receipt_id}/points")
