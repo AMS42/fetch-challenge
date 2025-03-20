@@ -2,19 +2,17 @@ import random, string, uuid
 from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_restful import Resource, Api
+from jsonschema import ValidationError
 from openapi_spec_validator import validate as validate_spec
 from openapi_spec_validator.readers import read_from_filename
 from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
 from openapi_schema_validator import validate as validate_schema, OAS30Validator
 from pathlib import Path
-from jsonschema import ValidationError
 from sys import stderr
 
 """
-TODO:
-[ ] make dynamic the receipt schema's reference to item schema (avoid circular references
-[X] comment where necessary
-[X] update os to Pathlib
+Future Enhancement:
+- Make dynamic the receipt schema's reference to item schema (avoiding circular references)
 """
 
 class DataInstance(object):
@@ -53,6 +51,8 @@ class DataInstance(object):
 
 class ReceiptProcessor(Resource):
     def post(self):
+        if not request.is_json: 
+            return "", 400
         if not self.__valid_receipt(request.json):
             return "", 400
         
@@ -69,7 +69,7 @@ class ReceiptProcessor(Resource):
             random.choices(string.ascii_uppercase + string.digits, k=8)
         )
         return uuid.uuid5(uuid.NAMESPACE_URL, f"Receipt #{_receipt_number}")
-    
+
     def __valid_receipt(self, receipt) -> bool: 
         try:
             validate_schema(
@@ -79,8 +79,7 @@ class ReceiptProcessor(Resource):
             )
             return True
         except ValidationError as e:
-            print(e, flush=stderr)
-        return False
+            return False
 
 
 class PointsCalculator(Resource):
@@ -101,7 +100,7 @@ class PointsCalculator(Resource):
 
     def __calculate_points(self, id: str) -> int:
         if id in DataInstance.receipt_points: 
-            return jsonify({"points": DataInstance.receipt_points[id]})
+            return DataInstance.receipt_points[id]
 
         receipt = DataInstance.receipts[id]
         items = receipt["items"]
@@ -143,4 +142,7 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
-    create_app().run(debug=True, port=8080)
+    from sys import argv
+    app = create_app()
+    if "--debug" in argv: app.run(debug=True, host="0.0.0.0", port=8080)
+    else: app.run(debug=False, host="0.0.0.0")

@@ -83,6 +83,11 @@ def test_receipt_process_post__malformed3_400(client):
     assert response.status_code == BAD_REQUEST
 
 
+def test_receipt_process_post__malformed4_400(client):  # no json data
+    response = client.post("/receipts/process")
+    assert response.status_code == BAD_REQUEST
+
+
 def test_receipts_points_get1(client):
     receipt = json.load(open(Path(RECEIPTS_DIR, "receipt1.json")))
     receipt_id = client.post("/receipts/process", json=receipt).json["id"]
